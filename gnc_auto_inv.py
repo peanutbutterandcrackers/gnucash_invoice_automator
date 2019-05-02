@@ -90,6 +90,7 @@ for record in CSVReader:
 				InvoiceValue = gnc_numeric_from_decimal(Decimal(unitPrice)) # Unit Price
 
 				InvoiceEntry = gnucash_business.Entry(GNCBook, Invoice)
+				InvoiceEntry.SetDateEntered(PostDate)
 				InvoiceEntry.SetDescription(Description)
 				InvoiceEntry.SetQuantity(gnc_numeric_from_decimal(Decimal(quantity)))
 				InvoiceEntry.SetInvAccount(IncomeAccount)
