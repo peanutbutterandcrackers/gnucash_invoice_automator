@@ -100,22 +100,22 @@ for record in CSVReader:
 				# print(PostDate, DueDate)
 
 				AccumulateSplits = True
-				Autopay = False 
+				Autopay = True
 				Invoice.PostToAccount(ReceivableAC, PostDate, DueDate, Description, AccumulateSplits, Autopay)
 				#create_invoice()
 		
-				if customerHasPaid:
-						Transaction = None 
-						TransferAccount = GNCRootAc.lookup_by_name("Assets").lookup_by_name("Current Assets").lookup_by_name("Petty Cash")
-						AmountPaid = gnc_numeric_from_decimal(Decimal(PaidAmount))
-						Changes_Refunds = gnc_numeric_from_decimal(Decimal(0))
-						PaymentDate = PostDate
-						Memo = "Payment Received"
-						Num = ""
-						Invoice.ApplyPayment(Transaction, TransferAccount, AmountPaid, Changes_Refunds, PaymentDate, Memo, Num)
-						#process_payment()
+				#if customerHasPaid:
+				#		Transaction = None 
+				#		TransferAccount = GNCRootAc.lookup_by_name("Assets").lookup_by_name("Current Assets").lookup_by_name("Petty Cash")
+				#		AmountPaid = gnc_numeric_from_decimal(Decimal(PaidAmount))
+				#		Changes_Refunds = gnc_numeric_from_decimal(Decimal(0))
+				#		PaymentDate = PostDate
+				#		Memo = "Payment Received"
+				#		Num = ""
+				#		Invoice.ApplyPayment(Transaction, TransferAccount, AmountPaid, Changes_Refunds, PaymentDate, Memo, Num)
+				#		#process_payment()
 
-		if quantity in ZERO_VALUES and customerHasPaid:
+		if customerHasPaid:
 				Transaction = None
 				GList = None # lots - whatever they are (Ref: https://code.gnucash.org/docs/MAINT/group__Owner.html#ga66a4b67de8ecc7798bd62e34370698fc)
 				PostedAccount = ReceivableAC
@@ -125,7 +125,7 @@ for record in CSVReader:
 				PaymentDate = Date
 				Memo = "Payment Received"
 				Num = ""
-				AutoPay = False
+				AutoPay = True
 				GNCCustomer.ApplyPayment(Transaction, GList, PostedAccount, TransferAccount, AmountPaid, Changes_Refunds, PaymentDate, Memo, Num, AutoPay) 
 
 GNCSession.save()
