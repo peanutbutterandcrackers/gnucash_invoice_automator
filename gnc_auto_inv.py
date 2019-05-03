@@ -16,7 +16,7 @@ def create_backup(_file):
 	timeStamp = datetime.datetime.now().isoformat()
 	backupFileName = "%s.%s.%s.backup.gnucash" % (fileName, SCRIPT_NAME, timeStamp)
 	backupPath = dirName + os.sep + backupFileName
-	shutil.copyfile(filePath, backupPath)
+	shutil.copy2(filePath, backupPath)
 
 def gnc_get_account_by_name(rootAccount, accountString):
 	"""Given the rootAccount of a GNCBook and an accountString in the form that appears
