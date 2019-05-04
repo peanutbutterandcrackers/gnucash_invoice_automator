@@ -125,7 +125,7 @@ def main():
 	args = parser.parse_args()
 
 	TRANSACTION_RECORDS = open_and_unpack_record_csv(args.CSVFILE)
-	GNCSession = open_gnucash_file(args.GNUCash)
+	GNCSession = open_gnucash_file(args.GNUCASHFILE)
 	
 	GNCBook = GNCSession.book
 	GNCRootAC = GNCBook.get_root_account()
@@ -152,14 +152,16 @@ def main():
 			# NON-STANDARD MAPPINGS
 			Remarks = TransactionRecord['Remarks']
 
-			# CUSTOM VARIABLES
+			# CUSTOM (USER-DEFINED) VARIABLES
 			CustomDescription = "%s Ltr. Milk" % Quantity
+			UserDefinedIncomeAccount = "Income:Sales:Milk Sales"
 
 			# FILTERING/FUTHER-MODIFYING THE VARIABLES
 			Description = Description if not isEmptyValue(Description) else CustomDescription
 			if not isEmptyValue(Remarks):
 					Description += " (%s)" % Remarks
 			Currency = Currency if not isEmptyValue(Currency) else getDefaultCurrency()
+			IncomeAccount = IncomeAccount if not isEmptyValue(IncomeAccount) else UserDefinedIncomeAccount
 			IncomeAccount = IncomeAccount if not isEmptyValue(IncomeAccount) else "Income:Sales"
 	
 			GNCIncomeAccount = gnc_get_account_by_name(GNCRootAC, IncomeAccount)
