@@ -4,6 +4,42 @@ from decimal import Decimal
 from dateutil.parser import parse as parse_date
 from gnucash import gnucash_business, GncNumeric
 
+class Record(dict):
+	"""
+		A Record, as-in transaction record. A row from a spreadsheet recording
+		a transaction. In this case, a row from a csv file. Each record, here,
+		is a dictionary of each row in the csv file, with the column headers
+		as the keys to the corresponding values from the row.
+		Example Record:
+			{
+			 "Customer": "John Doe",
+		 	 "Customer ID": "000001",
+			 "Quanitity": "3",
+			 "Unit Price": "80"
+			 }
+
+		This subclass of Python's default dict only makes the following extension:
+		If a key does not exist, instead of raising a KeyError, this returns an
+		empty string. This will, hopefully, allow the script to be a lot more flexible.
+	"""
+
+	def __getitem__(self, key):
+		try:
+			return dict.__getitem__(self, key)
+		except KeyError:
+			return ''
+
+def isEmptyValue(val):
+	"""Given a value, test whether or not it is zero or empty"""
+	ZERO_VALUES = [0, '', '0', None] # Zero/Empty
+	return val in ZERO_VALUES
+
+def getDefaultCurrency():
+	"""Return the system default currency"""
+	import locale
+	locale.setlocale(locale.LC_ALL, "")
+	return locale.localeconv()['int_curr_symbol'].strip()
+
 def create_backup(_file):
 	"""Makes a backup of the given file in the same directory"""
 	import sys
@@ -18,6 +54,16 @@ def create_backup(_file):
 	backupPath = dirName + os.sep + backupFileName
 	shutil.copy2(filePath, backupPath)
 
+def open_and_unpack_record_csv(csvfile, fieldDelimiter='\t'):
+	"""Given the path to a csv file containing the transaction records, return a csv.DictReader object"""
+	CSVFile = open(csvfile, 'r')
+	return csv.DictReader(CSVFile, delimiter=fieldDelimiter)
+
+def open_gnucash_file(gnucashfile):
+	"""Open the given GNUCash file (after making it's backup in the same dir) and return gnucash.Session object"""
+	create_backup(gnucashfile)
+	return gnucash.Session(gnucashfile)
+
 def gnc_get_account_by_name(rootAccount, accountString):
 	"""Given the rootAccount of a GNCBook and an accountString in the form that appears
 		in the GNUCash GUI under "Transfer" column of each account, returns the account.
@@ -28,7 +74,7 @@ def gnc_get_account_by_name(rootAccount, accountString):
 		[rootAccount is gotten thus: gnucash.Session("foobar.gnucash").book.get_root_account()]
 	"""
 	# Previously, accounts were gotten thus:
-	# IncomeAccount = GNCRootAc.lookup_by_name("Income").lookup_by_name("Sales").lookup_by_name("Milk Sales")
+	# IncomeAccount = GNCRootAC.lookup_by_name("Income").lookup_by_name("Sales").lookup_by_name("Milk Sales")
 	# This function recursively deals with nested accounts. Thereby eliminating the need for hard-coded accounts.
 	accountNesting = accountString.split(":")
 	if len(accountNesting) == 1:
@@ -68,70 +114,75 @@ def gnc_numeric_from_decimal(decimal_value):
 
     return GncNumeric(numerator, denominator)
 
-CSV_FILE = "asdf.csv"
-DELIMITER = "\t"
-CSVFile = open(CSV_FILE, 'r')
-CSVReader = csv.DictReader(CSVFile, delimiter=DELIMITER)
+def main():
+	RECORDS = open_and_unpack_record_csv("asdf.csv")
+	GNCSession = open_gnucash_file("foobar.gnucash")
+	
+	GNCBook = GNCSession.book
+	GNCRootAC = GNCBook.get_root_account()
+	ReceivableAC = gnc_get_account_by_name(GNCRootAC, "Assets:Accounts Receivable") # Hard-coding this as it is the norm
+	
+	for TransactionRecord in RECORDS:
+			# Change TransactionRecord's type from dict to Record
+			TransactionRecord = Record(TransactionRecord)
+	
+			# Start extracting info from the record
+			CustomerID = TransactionRecord['Customer ID']
+			if isEmptyValue(CustomerID):
+					continue
+			Date = parse_date(TransactionRecord['Date'])
+			PostDate = DueDate = Date
+			Quantity = TransactionRecord['Quantity']
+			UnitPrice = TransactionRecord['Unit Price']
+			Currency = TransactionRecord['Currency']
+			Currency = Currency if not isEmptyValue(Currency) else getDefaultCurrency()
+			# Note: Define 'global' vars, if IncomeAccount has been defined there, do not extract from
+			# TransactionRecord. If not, extract from here. If it is an empty value, fall back to "Income:Sales"
+			IncomeAccount = TransactionRecord['Income Account']
+			IncomeAccount = IncomeAccount if not isEmptyValue(IncomeAccount) else "Income:Sales"
+	
+			GNCIncomeAccount = gnc_get_account_by_name(GNCRootAC, IncomeAccount)
+			GNCCurrency = GNCBook.get_table().lookup('CURRENCY', Currency)
+			GNCCustomer = GNCBook.CustomerLookupByID(CustomerID)
+			if (GNCCustomer == None) or (not isinstance(GNCCustomer, gnucash_business.Customer)):
+					continue # use logger here (and in rest of the code)
+	
+			customerHasPaid = False
+			if not isEmptyValue(TransactionRecord['Cash Paid']):
+				customerHasPaid = True
+				PaidAmount = TransactionRecord['Cash Paid']
+	
+			if not isEmptyValue(Quantity): # make something akin to row_is_valid_record()
+					Invoice = gnucash_business.Invoice(GNCBook, GNCBook.InvoiceNextID(GNCCustomer), GNCCurrency, GNCCustomer)
+					# try catching "Remarks" or "Description" column and if they aren't there then generate one
+					Description = "%s Ltr. Milk" % Quantity
+					InvoiceValue = gnc_numeric_from_decimal(Decimal(UnitPrice)) # Unit Price
+					InvoiceEntry = gnucash_business.Entry(GNCBook, Invoice)
+					InvoiceEntry.SetDateEntered(PostDate)
+					InvoiceEntry.SetDescription(Description)
+					InvoiceEntry.SetQuantity(gnc_numeric_from_decimal(Decimal(Quantity)))
+					InvoiceEntry.SetInvAccount(GNCIncomeAccount)
+					InvoiceEntry.SetInvPrice(InvoiceValue)
+					AccumulateSplits = True
+					Autopay = True
+					Invoice.PostToAccount(ReceivableAC, PostDate, DueDate, Description, AccumulateSplits, Autopay)
+			
+			if customerHasPaid:
+					# (Ref: https://code.gnucash.org/docs/MAINT/group__Owner.html#ga66a4b67de8ecc7798bd62e34370698fc)
+					Transaction = None
+					GList = None
+					PostedAccount = ReceivableAC
+					TransferAccount = gnc_get_account_by_name(GNCRootAC, "Assets:Current Assets:Petty Cash")
+					AmountPaid = gnc_numeric_from_decimal(Decimal(PaidAmount))
+					Refund = gnc_numeric_from_decimal(Decimal(0))
+					PaymentDate = Date
+					Memo = "Payment Received"
+					Num = ""
+					AutoPay = True
+					GNCCustomer.ApplyPayment(Transaction, GList, PostedAccount, TransferAccount, AmountPaid, Refund, PaymentDate, Memo, Num, AutoPay) 
+	
+	GNCSession.save()
+	GNCSession.end()
 
-GNCFile = "foobar.gnucash"
-create_backup(GNCFile)
-GNCSession = gnucash.Session(GNCFile)
-GNCBook = GNCSession.book
-GNCRootAc = GNCBook.get_root_account()
-NPR = GNCBook.get_table().lookup('CURRENCY', 'NPR')
-IncomeAccount = gnc_get_account_by_name(GNCRootAc, "Income:Sales:Milk Sales")
-ReceivableAC = gnc_get_account_by_name(GNCRootAc, "Assets:Accounts Receivable")
-# open_gnucash_file()
-# This function should take care of creating backups, just in case.
-# If anything goes wrong, revert the changes, even, perhaps.
-
-ZERO_VALUES = [0, '', '0', None]
-
-for record in CSVReader:
-		Date = parse_date(record['Date'])
-		PostDate = DueDate = Date
-		customerID = record['Customer ID']
-		quantity = record['Quantity']
-		unitPrice = record['Unit Price']
-		customerHasPaid = False
-		if record['Cash Paid'] not in ZERO_VALUES:
-			customerHasPaid = True
-			PaidAmount = record['Cash Paid']
-
-		if customerID in ZERO_VALUES: # Replace this with is_proper_customer_id()
-				continue
-		GNCCustomer = GNCBook.CustomerLookupByID(customerID)
-		if (GNCCustomer == None) or (not isinstance(GNCCustomer, gnucash_business.Customer)):
-				continue # use logger here (and in rest of the code)
-
-		if quantity not in ZERO_VALUES: # make something akin to row_is_valid_record()
-				Invoice = gnucash_business.Invoice(GNCBook, GNCBook.InvoiceNextID(GNCCustomer), NPR, GNCCustomer)
-				# try catching "Remarks" or "Description" column and if they aren't there then generate one
-				Description = "%s Ltr. Milk" % quantity
-				InvoiceValue = gnc_numeric_from_decimal(Decimal(unitPrice)) # Unit Price
-				InvoiceEntry = gnucash_business.Entry(GNCBook, Invoice)
-				InvoiceEntry.SetDateEntered(PostDate)
-				InvoiceEntry.SetDescription(Description)
-				InvoiceEntry.SetQuantity(gnc_numeric_from_decimal(Decimal(quantity)))
-				InvoiceEntry.SetInvAccount(IncomeAccount)
-				InvoiceEntry.SetInvPrice(InvoiceValue)
-				AccumulateSplits = True
-				Autopay = True
-				Invoice.PostToAccount(ReceivableAC, PostDate, DueDate, Description, AccumulateSplits, Autopay)
-		
-		if customerHasPaid:
-				# (Ref: https://code.gnucash.org/docs/MAINT/group__Owner.html#ga66a4b67de8ecc7798bd62e34370698fc)
-				Transaction = None
-				GList = None
-				PostedAccount = ReceivableAC
-				TransferAccount = gnc_get_account_by_name(GNCRootAc, "Assets:Current Assets:Petty Cash")
-				AmountPaid = gnc_numeric_from_decimal(Decimal(PaidAmount))
-				Refund = gnc_numeric_from_decimal(Decimal(0))
-				PaymentDate = Date
-				Memo = "Payment Received"
-				Num = ""
-				AutoPay = True
-				GNCCustomer.ApplyPayment(Transaction, GList, PostedAccount, TransferAccount, AmountPaid, Refund, PaymentDate, Memo, Num, AutoPay) 
-
-GNCSession.save()
-GNCSession.end()
+if __name__ == "__main__":
+	main()
