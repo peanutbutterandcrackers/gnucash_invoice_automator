@@ -1,5 +1,7 @@
 import csv
 import gnucash
+import argparse
+
 from decimal import Decimal
 from dateutil.parser import parse as parse_date
 from gnucash import gnucash_business, GncNumeric
@@ -115,8 +117,15 @@ def gnc_numeric_from_decimal(decimal_value):
     return GncNumeric(numerator, denominator)
 
 def main():
-	TRANSACTION_RECORDS = open_and_unpack_record_csv("asdf.csv")
-	GNCSession = open_gnucash_file("foobar.gnucash")
+	parser = argparse.ArgumentParser(
+		description="A script to automatically add Invoice and Payments to a GNUCash file from a CSV file (exported from LibreOffice Calc) containing the trasaction records."
+	  )
+	parser.add_argument("CSVFILE", help="The CSV file that contains the transaction records")
+	parser.add_argument("GNUCASHFILE", help="The GNUCash file to record the transactions in")
+	args = parser.parse_args()
+
+	TRANSACTION_RECORDS = open_and_unpack_record_csv(args.CSVFILE)
+	GNCSession = open_gnucash_file(args.GNUCash)
 	
 	GNCBook = GNCSession.book
 	GNCRootAC = GNCBook.get_root_account()
