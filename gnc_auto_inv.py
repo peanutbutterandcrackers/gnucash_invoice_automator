@@ -115,30 +115,42 @@ def gnc_numeric_from_decimal(decimal_value):
     return GncNumeric(numerator, denominator)
 
 def main():
-	RECORDS = open_and_unpack_record_csv("asdf.csv")
+	TRANSACTION_RECORDS = open_and_unpack_record_csv("asdf.csv")
 	GNCSession = open_gnucash_file("foobar.gnucash")
 	
 	GNCBook = GNCSession.book
 	GNCRootAC = GNCBook.get_root_account()
 	ReceivableAC = gnc_get_account_by_name(GNCRootAC, "Assets:Accounts Receivable") # Hard-coding this as it is the norm
-	
-	for TransactionRecord in RECORDS:
+
+	for TransactionRecord in TRANSACTION_RECORDS:
 			# Change TransactionRecord's type from dict to Record
 			TransactionRecord = Record(TransactionRecord)
 	
-			# Start extracting info from the record
+			##### START EXTRACTING INFO FROM THE RECORD #####
+			# STANDARD MAPPINGS
 			CustomerID = TransactionRecord['Customer ID']
 			if isEmptyValue(CustomerID):
 					continue
 			Date = parse_date(TransactionRecord['Date'])
-			PostDate = DueDate = Date
+			PostDate = DueDate = Date # For now, anyways
 			Quantity = TransactionRecord['Quantity']
 			UnitPrice = TransactionRecord['Unit Price']
+			Description = TransactionRecord['Description']
 			Currency = TransactionRecord['Currency']
-			Currency = Currency if not isEmptyValue(Currency) else getDefaultCurrency()
 			# Note: Define 'global' vars, if IncomeAccount has been defined there, do not extract from
 			# TransactionRecord. If not, extract from here. If it is an empty value, fall back to "Income:Sales"
 			IncomeAccount = TransactionRecord['Income Account']
+			# NON-STANDARD MAPPINGS
+			Remarks = TransactionRecord['Remarks']
+
+			# CUSTOM VARIABLES
+			CustomDescription = "%s Ltr. Milk" % Quantity
+
+			# FILTERING/FUTHER-MODIFYING THE VARIABLES
+			Description = Description if not isEmptyValue(Description) else CustomDescription
+			if not isEmptyValue(Remarks):
+					Description += " (%s)" % Remarks
+			Currency = Currency if not isEmptyValue(Currency) else getDefaultCurrency()
 			IncomeAccount = IncomeAccount if not isEmptyValue(IncomeAccount) else "Income:Sales"
 	
 			GNCIncomeAccount = gnc_get_account_by_name(GNCRootAC, IncomeAccount)
@@ -154,8 +166,6 @@ def main():
 	
 			if not isEmptyValue(Quantity): # make something akin to row_is_valid_record()
 					Invoice = gnucash_business.Invoice(GNCBook, GNCBook.InvoiceNextID(GNCCustomer), GNCCurrency, GNCCustomer)
-					# try catching "Remarks" or "Description" column and if they aren't there then generate one
-					Description = "%s Ltr. Milk" % Quantity
 					InvoiceValue = gnc_numeric_from_decimal(Decimal(UnitPrice)) # Unit Price
 					InvoiceEntry = gnucash_business.Entry(GNCBook, Invoice)
 					InvoiceEntry.SetDateEntered(PostDate)
