@@ -167,7 +167,7 @@ def main():
 	
 			##### START EXTRACTING INFO FROM THE RECORD #####
 			# STANDARD MAPPINGS
-			CustomerID = TransactionRecord['Customer ID']
+			CustomerID = "%06d" % int(TransactionRecord['Customer ID']) # GNUCash Standard ID format
 			if isEmptyValue(CustomerID):
 					continue
 			Date = parse_date(TransactionRecord['Date'])
