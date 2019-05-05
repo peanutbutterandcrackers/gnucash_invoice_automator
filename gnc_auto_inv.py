@@ -167,9 +167,9 @@ def main():
 	
 			##### START EXTRACTING INFO FROM THE RECORD #####
 			# STANDARD MAPPINGS
-			CustomerID = "%06d" % int(TransactionRecord['Customer ID']) # GNUCash Standard ID format
-			if isEmptyValue(CustomerID):
-					continue
+			CustomerID = TransactionRecord['Customer ID']
+			if isEmptyValue(CustomerID) or not CustomerID.isdigit():
+				continue
 			Date = parse_date(TransactionRecord['Date'])
 			PostDate = DueDate = Date # For now, anyways
 			Quantity = TransactionRecord['Quantity']
@@ -187,6 +187,7 @@ def main():
 			UserDefinedIncomeAccount = "Income:Sales:Milk Sales"
 
 			# FILTERING/FUTHER-MODIFYING THE VARIABLES
+			CustomerID = "%06d" % int(CustomerID) # GNUCash Standard ID Format
 			Description = Description if not isEmptyValue(Description) else CustomDescription
 			if not isEmptyValue(Remarks):
 					Description += " (%s)" % Remarks
