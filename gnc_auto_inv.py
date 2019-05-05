@@ -1,9 +1,10 @@
+import sys
 import csv
+import locale
 import gnucash
 import argparse
 
 from decimal import Decimal
-from dateutil.parser import parse as parse_date
 from gnucash import gnucash_business, GncNumeric
 
 class Record(dict):
@@ -31,6 +32,37 @@ class Record(dict):
 		except KeyError:
 			return ''
 
+def parse_date(dateStr, DATE_FMT=''):
+	from dateutil.parser import parse
+
+	class D_FMT_STR(str):
+		"""A convinience class for working with dates."""
+
+		def getSeparator(self):
+			return self.lower().strip()[2] # "%m/%d/%y"[2] is '/'
+
+		def dayfirst(self):
+			if self.lower().strip().split(self.getSeparator())[0] == '%d':
+					return True
+			else:
+					# From >>> help(dateutil.parser.parse):
+					# "If ``yearfirst`` is set to ``True``, this distinguishes between YDM and
+					# YMD. If set to ``None``, this value is retrieved from the current
+					# :class:`parserinfo` object (which itself defaults to ``False``)."
+					return None
+
+		def yearfirst(self):
+			if self.lower().strip().split(self.getSeparator())[0] == '%y':
+					return True
+			else:
+					# See the explanation above.
+					return None
+
+	if DATE_FMT == '':
+		DATE_FMT = locale.nl_langinfo(locale.D_FMT)
+	DATE_FMT = D_FMT_STR(DATE_FMT)
+	return parse(dateStr, dayfirst=DATE_FMT.dayfirst(), yearfirst=DATE_FMT.yearfirst())
+
 def isEmptyValue(val):
 	"""Given a value, test whether or not it is zero or empty"""
 	ZERO_VALUES = [0, '', '0', None] # Zero/Empty
@@ -38,13 +70,11 @@ def isEmptyValue(val):
 
 def getDefaultCurrency():
 	"""Return the system default currency"""
-	import locale
 	locale.setlocale(locale.LC_ALL, "")
 	return locale.localeconv()['int_curr_symbol'].strip()
 
 def create_backup(_file):
 	"""Makes a backup of the given file in the same directory"""
-	import sys
 	import datetime
 	import os, shutil
 	SCRIPT_NAME = os.path.splitext(sys.argv[0])[0]
